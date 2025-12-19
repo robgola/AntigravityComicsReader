@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ACR User Manual</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #1a1a1a;
+            color: #e0e0e0;
+            line-height: 1.6;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1, h2, h3 {
+            color: #ffffff;
+            border-bottom: 1px solid #333;
+            padding-bottom: 10px;
+        }
+        h1 { margin-top: 0; }
+        .chapter {
+            margin-bottom: 40px;
+            background: #252525;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+        .step {
+            margin-bottom: 15px;
+        }
+        strong { color: #ffcc00; }
+        code {
+            background-color: #333;
+            padding: 2px 5px;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="chapter">
+        <h1>Introduction</h1>
+        <p><strong>ACR (Antigravity Comic Reader)</strong> is a specialized client designed to browse, manage, and read your comic book collection hosted on a <strong>Komga Server</strong>.</p>
+        <p>It provides a seamless experience for browsing libraries, exploring detailed series information, and reading comics with an optimized, immersive reader.</p>
+    </div>
+
+    <div class="chapter">
+        <h2>Chapter 1: Configuration</h2>
+        <p>Before you begin, you must connect the application to your Komga server.</p>
+        <div class="step">
+            1. Navigate to the <strong>Settings</strong> tab in the top menu.
+        </div>
+        <div class="step">
+            2. You will see the Server Configuration panel. Currently, this displays the connected server:
+            <ul>
+                <li><strong>Server Name:</strong> The friendly name of your server.</li>
+                <li><strong>Address:</strong> The URL/IP of your Komga instance.</li>
+                <li><strong>Port:</strong> The connection port (default 8443).</li>
+                <li><strong>User:</strong> The logged-in user.</li>
+            </ul>
+        </div>
+        <p><em>Note: These settings are currently read-only and configured in the app constants.</em></p>
+    </div>
+
+    <div class="chapter">
+        <h2>Chapter 2: Browsing Libraries</h2>
+        <p>Use the <strong>Import</strong> tab to browse your server content.</p>
+        
+        <h3>Library View</h3>
+        <p>This is the main entry point. You will see a grid of all available libraries on your server.</p>
+        <ul>
+            <li>Tap a <strong>Library Card</strong> to enter that library.</li>
+            <li>The card displays the library name and a representative cover image.</li>
+        </ul>
+
+        <h3>Series List</h3>
+        <p>Once inside a library, you will browse its Series.</p>
+        <ul>
+            <li><strong>Folders vs. Flat List:</strong> You can toggle between a folder-based view (directories) and a flat alphabetical list of series using the toggle button in the header.</li>
+            <li><strong>Folder Navigation:</strong> Tap on folders to drill down into sub-directories.</li>
+            <li><strong>Series Selection:</strong> Tap on a Series card to view its books.</li>
+        </ul>
+
+        <h3>Book List (Series Detail)</h3>
+        <p>This view displays all books within a selected series.</p>
+        <ul>
+            <li><strong>Hero Section:</strong> The layout features a highlighted "Hero" section at the top displaying the focused book's cover and metadata (Writer, Penciller, Inker, Summary).</li>
+            <li><strong>Selection:</strong> Tap any book in the bottom grid to focus it in the Hero section.</li>
+            <li><strong>Multi-Select:</strong> Tap the background to deselect. (Selecting multiple books for batch actions is a planned feature).</li>
+        </ul>
+    </div>
+
+    <div class="chapter">
+        <h2>Chapter 3: Reading</h2>
+        <p>The core experience of ACR is reading your comics.</p>
+        <div class="step">
+            1. From the Book List, tap the yellow <strong>Read</strong> button in the Hero section.
+        </div>
+        <div class="step">
+            2. The book will download (streaming) and open in the <strong>Reader</strong>.
+        </div>
+        
+        <h3>Reader Controls</h3>
+        <ul>
+            <li><strong>Turn Pages:</strong> Tap the left or right edges of the screen, or swipe.</li>
+            <li><strong>Menu:</strong> Tap the center of the screen to toggle the controls (Top Bar and Thumbnail slider).</li>
+            <li><strong>Thumbnails:</strong> Use the bottom slider to quickly jump to any page.</li>
+            <li><strong>Close:</strong> Tap the "Done" button in the top left to return to the book list.</li>
+        </ul>
+    </div>
+
+    <div class="chapter">
+        <h2>Chapter 4: Importing for Offline</h2>
+        <p>You can download books to your local device library ("My Library").</p>
+        <div class="step">
+            1. In the Book List, select a book (or view it in the Hero section).
+        </div>
+        <div class="step">
+            2. Tap the <strong>Import</strong> button.
+        </div>
+        <div class="step">
+            3. Confirm the download. The book will be saved to your device and appear in the <strong>Library</strong> tab (Local Library).
+        </div>
+    </div>
+
+</body>
+</html>

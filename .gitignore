@@ -1,0 +1,26 @@
+# Xcode
+build/
+DerivedData/
+*.xcworkspace
+!default.xcworkspace
+xcuserdata/
+*.xccheckout
+*.xcscheme
+!default.xcscheme
+*.moved-aside
+*.xcuserstate
+*.itunespackage
+Config.xcconfig
+
+# CocoaPods
+Pods/
+Podfile.lock
+
+# Secrets and Configs
+.env
+*.secret
+Secrets.plist
+AppConstants_Local.swift
+
+# OS Files
+.DS_Store
