@@ -34,10 +34,9 @@ struct MainTabView: View {
                             Text("Importa").tag(1)
                             Text("Opzioni").tag(2)
                             Text("Aiuto").tag(3)
-                            Text("Vision").tag(4)
                         }
                         .pickerStyle(SegmentedPickerStyle())
-                        .frame(width: 450) // Widened for extra tab
+                        .frame(width: 380) // Reduced width for 4 tabs
                         // Removed scaleEffect(x: 1, y: 1.2) to prevent font stretching
                         .padding(.top, 0) // Removed extra offset
                         
@@ -71,8 +70,6 @@ struct MainTabView: View {
                         SettingsView()
                     case 3:
                         HelpView()
-                    case 4:
-                        GeminiTestView()
                     default:
                         EmptyView()
                     }
@@ -83,16 +80,15 @@ struct MainTabView: View {
             // Global Overlay
             DownloadStatusOverlay()
             
-            // Gemini Quota Overlay (Top Right)
+            // Gemini Quota Overlay (Bottom Right Floating)
             VStack {
+                Spacer()
                 HStack {
                     Spacer()
                     QuotaOverlayView()
-                        .ignoresSafeArea()
                 }
-                Spacer()
             }
-            .allowsHitTesting(false) // Non-interactive as requested
+            .allowsHitTesting(false)
         }
         .preferredColorScheme(.dark)
     }

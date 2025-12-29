@@ -1,4 +1,4 @@
- ACR: Antigravity Comic Reader 🚀📚
+# ACR: Antigravity Comic Reader 🚀📚
 
 **ACR (Antigravity Comic Reader)** is a premium, AI-enhanced comic reader for iOS, specifically designed as a client for **Komga** servers. It combines a modern "Neon" aesthetic with powerful artificial intelligence features to provide the ultimate digital comic experience.
 

@@ -77,17 +77,18 @@ struct ContinueReadingCarouselView: View {
                         
                         // 2. Metadata
                         VStack(alignment: .leading, spacing: 8) {
-                            if let info = currentMetadata {
+                            // PRIORITIZE book.metadata for instant response, fallback to currentMetadata if async load is still pending or needed
+                            if let info = book.metadata ?? currentMetadata {
                                 Text(info.series.isEmpty ? book.title : info.series)
                                     .font(.title)
                                     .bold()
                                     .foregroundColor(.white)
                                 
                                 if !info.number.isEmpty {
-                                    Text("# \(info.number)")
+                                    Text("#\(info.number)") // Removed space to match bold styling
                                         .font(.title2)
                                         .bold()
-                                        .foregroundColor(.yellow)
+                                        .foregroundColor(.white)
                                 }
                                 
                                 // Credits
@@ -159,7 +160,7 @@ struct ContinueReadingCarouselView: View {
             .onAppear {
                 loadMetadata(for: books[currentIndex])
             }
-            .onChange(of: books.map(\.id)) { _ in
+            .onChange(of: books.map(\.id)) { oldVal, newVal in
                 currentIndex = 0 // Reset to start
                 if !books.isEmpty {
                     loadMetadata(for: books[0])
@@ -179,8 +180,7 @@ struct ContinueReadingCarouselView: View {
                     self.currentMetadata = info
                 }
             } else {
-                // Try searching deeper? Or just accept failure.
-                // NOTE: parseComicInfo logic assumes xml is continuously available in temp.
+                // Fails silently if no info found
             }
         }
     }

@@ -73,11 +73,15 @@ struct LibraryImportCard: View {
                                             return img
                                         }()
                                         
-                                        Image(uiImage: displayImage)
-                                            .resizable()
-                                            .scaledToFill()
-                                            .frame(width: geo.size.width - 24)
-                                            .frame(height: boxHeight, alignment: .top)
+                                        Color.clear
+                                            .aspectRatio(0.66, contentMode: .fit)
+                                            .overlay(
+                                                Image(uiImage: displayImage)
+                                                    .resizable()
+                                                    .aspectRatio(contentMode: .fill),
+                                                alignment: .trailing
+                                            )
+                                            .clipped()
                                             // Randomness (Increased Staggering)
                                             .rotationEffect(.degrees(Double((index * 13) % 30 - 15))) 
                                             .offset(x: CGFloat((index * 15) % 40 - 20))

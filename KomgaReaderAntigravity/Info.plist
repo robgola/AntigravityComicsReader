@@ -5,9 +5,9 @@
 	<key>CFBundleDisplayName</key>
 	<string>ACR</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.1</string>
+	<string>3.2.0</string>
 	<key>CFBundleVersion</key>
-	<string>2</string>
+	<string>19</string>
 	<key>NSTranslationUsageDescription</key>
 	<string>L'app deve tradurre i testi dei fumetti.</string>
 	<key>UIFileSharingEnabled</key>

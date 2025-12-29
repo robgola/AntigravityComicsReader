@@ -6,5 +6,5 @@ struct AppConstants {
     static let openAIModel = "gpt-3.5-turbo"
     
     // App Version (Increment on every change proposal)
-    static let appVersion = "v0.9.4V"
+    static let appVersion = "v5.0.0"
 }

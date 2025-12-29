@@ -59,21 +59,31 @@ struct ContentView: View {
                             Spacer()
                             
                             // Status
-                            HStack(spacing: 6) {
-                                Circle()
-                                    .fill(Color.green)
-                                    .frame(width: 8, height: 8)
-                                    .shadow(radius: 4)
-                                Text("On-Line") // Dynamic logic would go here if we had detailed status
-                                    .font(.caption)
-                                    .bold()
-                                    .foregroundColor(.green)
-                                    .shadow(color: .black, radius: 2)
+                            HStack(spacing: 12) {
+                                HStack(spacing: 6) {
+                                    Circle()
+                                        .fill(appState.isLoadingLibraries ? Color.yellow : (appState.libraryError != nil ? Color.red : Color.green))
+                                        .frame(width: 8, height: 8)
+                                        .shadow(radius: 4)
+                                    Text(appState.isLoadingLibraries ? "Connecting" : (appState.libraryError != nil ? "Off-Line" : "On-Line"))
+                                        .font(.caption)
+                                        .bold()
+                                        .foregroundColor(appState.isLoadingLibraries ? Color.yellow : (appState.libraryError != nil ? Color.red : Color.green))
+                                        .shadow(color: .black, radius: 2)
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.black.opacity(0.5))
+                                .cornerRadius(8)
+                                
+                                Button(action: { appState.fetchLibraries() }) {
+                                    Image(systemName: "arrow.clockwise")
+                                        .font(.system(size: 14, weight: .bold))
+                                        .foregroundColor(.white)
+                                        .padding(8)
+                                        .background(Circle().fill(Color.white.opacity(0.1)))
+                                }
                             }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color.black.opacity(0.5))
-                            .cornerRadius(8)
                         }
                         .padding()
                         .background(

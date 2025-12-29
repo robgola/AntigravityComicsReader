@@ -12,7 +12,7 @@ struct LocalLibraryView: View {
     @State private var showDeleteFolderConfirmation = false
     
     // Grid
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 16), count: 5)
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 15), count: 5)
     
     // Dashboard State
     @State private var selectedLibrary: String = "Tutte"
@@ -510,7 +510,7 @@ struct LocalFolderContentView: View {
     var onSelect: ((LocalBook) -> Void)? = nil
     
     var body: some View {
-        LazyVGrid(columns: columns, spacing: 40) {
+        LazyVGrid(columns: columns, spacing: 15) {
             // Folders (Always Navigation)
             ForEach(node.children) { child in
                 NavigationLink(destination: LocalFolderDetailView(node: child, columns: columns, onDelete: onDelete)) {
@@ -636,14 +636,20 @@ struct LocalBookItemView: View {
         // CONTENT
         let content = VStack(alignment: .center, spacing: 8) {
             if let cover = book.coverImage {
-                Image(uiImage: cover)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(height: 180)
+                // Robust Cropping: 2:3 Container with Leading Alignment
+                Color.clear
+                    .aspectRatio(0.66, contentMode: .fit)
+                    .overlay(
+                        Image(uiImage: cover)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill),
+                        alignment: .trailing
+                    )
+                    .clipped()
             } else {
                 Rectangle()
                     .fill(Color.gray.opacity(0.3))
-                    .frame(height: 180)
+                    .aspectRatio(0.66, contentMode: .fit)
             }
             
             Text(book.title)
@@ -656,8 +662,8 @@ struct LocalBookItemView: View {
             
             if let issue = book.metadata?.number {
                 Text("#\(issue)")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
+                    .font(.caption2).bold()
+                    .foregroundColor(.white)
             }
         }
         

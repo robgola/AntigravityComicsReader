@@ -39,6 +39,7 @@ struct ComicReaderView: View {
     @State private var showDebug = false
 
     @State private var showMenu = false // Toggle for overlay menu
+    @State private var showDebugLog = false // New Debug Modal
     
     // MARK: - New Interactive UI State
     @State private var showShareSheet = false
@@ -54,6 +55,9 @@ struct ComicReaderView: View {
     
     @Environment(\.dismiss) var dismiss // For closing the view
     @EnvironmentObject var appState: AppState // For fullscreen control
+    
+    // Internal Gesture Controls
+    @State private var shouldSuppressTap = false
     
     init(bookURL: URL, bookId: String?) {
         self.initialBookURL = bookURL
@@ -87,61 +91,71 @@ struct ComicReaderView: View {
                 
                 // LAYER 2: Exact Positioning Controls (Floating)
                 if !showMenu {
-                    // NEW: Bottom Left Toggle (Original -> Source -> Translated)
-                    Button(action: {
-                        switch translationMode {
-                        case .original:
-                            translationMode = .sourceText
-                        case .sourceText:
-                            translationMode = .translatedOverlay
-                        case .translatedOverlay:
-                            translationMode = .original
-                        }
-                    }) {
-                        // Icon logic
-                        Image(systemName: translationMode == .original ? "eye.slash" : (translationMode == .sourceText ? "text.bubble" : "eye.fill"))
-                            .font(.system(size: 24))
-                            .foregroundColor(.white)
-                            .padding(12)
-                            .background(Circle().fill(Color.black.opacity(0.5)))
-                            .shadow(radius: 4)
-                    }
-                    .position(x: 40, y: geometry.size.height - 40) // Bottom Left
-                    .opacity(visionBalloons.isEmpty ? 0.3 : 1.0) // Dim if no data
-                    .disabled(visionBalloons.isEmpty)
-                    
-                    // Right Toggle (Gear/Settings)
-                    Button(action: {
-                        withAnimation(.easeInOut(duration: 0.3)) {
-                            showMenu.toggle()
-                        }
-                    }) {
-                        Image(systemName: "gearshape.fill")
-                            .font(.system(size: 22))
-                            .foregroundColor(.white)
-                            .padding(8)
-                            .background(Circle().fill(Color.black.opacity(0.3)))
-                    }
-                    .position(x: geometry.size.width - 26.5, y: 36) // Exact User Request
-                    
-                    // NEW: Bottom Right Translate Trigger (Replaces Selection)
-                    Button(action: {
-                         Task { await performGeminiTranslation() }
-                    }) {
-                        if isGeminiTranslating {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                .frame(width: 24, height: 24)
-                        } else {
-                            Image(systemName: "translate")
+                    Group {
+                        // Bottom Left Toggle
+                        Button(action: {
+                            if shouldSuppressTap { return }
+                            switch translationMode {
+                            case .original: translationMode = .sourceText
+                            case .sourceText: translationMode = .translatedOverlay
+                            case .translatedOverlay: translationMode = .original
+                            }
+                        }) {
+                            Image(systemName: translationMode == .original ? "eye.slash" : (translationMode == .sourceText ? "text.bubble" : "eye.fill"))
                                 .font(.system(size: 24))
-                                .foregroundColor(visionBalloons.isEmpty ? .white : .green) // Green if active
+                                .foregroundColor(.white)
+                                .padding(12)
+                                .background(Circle().fill(Color.black.opacity(0.5)))
+                                .shadow(radius: 4)
                         }
+                        .position(x: 40, y: geometry.size.height - 40)
+                        
+                        // Gear/Settings (Always visible for opening menu)
+                        Button(action: {
+                            if shouldSuppressTap { return }
+                            withAnimation(.easeInOut(duration: 0.3)) { showMenu.toggle() }
+                        }) {
+                            Image(systemName: "gearshape.fill")
+                                .font(.system(size: 22))
+                                .foregroundColor(.white)
+                                .padding(8)
+                                .background(Circle().fill(Color.black.opacity(0.3)))
+                        }
+                        .position(x: geometry.size.width - 26.5, y: 36)
+                        
+                        // Bottom Right Translate
+                        Button(action: {
+                            if shouldSuppressTap {
+                                shouldSuppressTap = false
+                                return
+                            }
+                            Task { await performGeminiTranslation() }
+                        }) {
+                            ZStack {
+                                if isGeminiTranslating {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                        .frame(width: 24, height: 24)
+                                } else {
+                                    Image(systemName: "translate")
+                                        .font(.system(size: 24))
+                                        .foregroundColor(visionBalloons.isEmpty ? .white : .green)
+                                }
+                            }
+                            .frame(width: 60, height: 60)
+                            .background(Circle().fill(Color.blue.opacity(0.8)))
+                            .shadow(radius: 4)
+                        }
+                        .position(x: geometry.size.width - 40, y: geometry.size.height - 40)
+                        .simultaneousGesture(
+                            LongPressGesture(minimumDuration: 0.8)
+                                .onEnded { _ in
+                                    shouldSuppressTap = true
+                                    Task { await performGeminiTranslation(force: true) }
+                                }
+                        )
                     }
-                    .frame(width: 60, height: 60)
-                    .background(Circle().fill(Color.blue.opacity(0.8))) // Make it prominent
-                    .shadow(radius: 4)
-                    .position(x: geometry.size.width - 40, y: geometry.size.height - 40) // Bottom Right
+                    .allowsHitTesting(true)
                 }
                 
                 // LAYER 3: Menu Overlay (conditional) - Update Back/share positions? 
@@ -182,7 +196,7 @@ struct ComicReaderView: View {
                                     
                                     Button(action: { dismiss() }) {
                                         Image(systemName: "chevron.left")
-                                            .font(.system(size: 22))
+                                            .font(.system(size: 29))
                                             .foregroundColor(.white)
                                     }
                                     .position(x: 26.5, y: 36)
@@ -210,19 +224,42 @@ struct ComicReaderView: View {
                                     .position(x: geometry.size.width - 26.5 - 50, y: 36)
                                     
                                     // Translate (Offset Left of Share)
-                                    Button(action: { 
+                                    Button(action: {
+                                        if shouldSuppressTap {
+                                            shouldSuppressTap = false
+                                            return
+                                        }
                                         Task { await performGeminiTranslation() }
                                     }) {
-                                        if isGeminiTranslating {
-                                            ProgressView()
-                                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                        } else {
-                                            Image(systemName: "translate")
-                                                .font(.system(size: 22))
-                                                .foregroundColor(visionBalloons.isEmpty ? .white : .green)
+                                        ZStack {
+                                            if isGeminiTranslating {
+                                                ProgressView()
+                                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                            } else {
+                                                Image(systemName: "translate")
+                                                    .font(.system(size: 22))
+                                                    .foregroundColor(visionBalloons.isEmpty ? .white : .green)
+                                            }
                                         }
+                                        .padding(8)
                                     }
                                     .position(x: geometry.size.width - 26.5 - 100, y: 36)
+                                    .simultaneousGesture(
+                                        LongPressGesture(minimumDuration: 0.8)
+                                            .onEnded { _ in
+                                                shouldSuppressTap = true
+                                                Task { await performGeminiTranslation(force: true) }
+                                            }
+                                    )
+                                    
+                                    // Debug Log (Offset Left of Translate)
+                                    Button(action: { showDebugLog = true }) {
+                                        Image(systemName: "ladybug.fill")
+                                            .font(.system(size: 22))
+                                            .foregroundColor(.white) // Orange for Debug
+                                            .padding(8)
+                                    }
+                                    .position(x: geometry.size.width - 26.5 - 150, y: 36)
                                     
                                     // Gear (Right 26.5/36 - EXACT MATCH)
                                     Button(action: {
@@ -315,6 +352,12 @@ struct ComicReaderView: View {
             if !pages.isEmpty && currentPageIndex < pages.count {
                 ShareSheet(activityItems: [pages[currentPageIndex]])
             }
+        }
+        .sheet(isPresented: $showDebugLog) {
+            DebugLogView(
+                logContent: GeminiService.shared.lastRawResponse,
+                markedImage: GeminiService.shared.lastMarkedImage
+            )
         }
         .navigationBarHidden(true) // Legacy
         .statusBar(hidden: true) // Legacy
@@ -444,23 +487,34 @@ struct ComicReaderView: View {
         )
     }
     
-    private func performGeminiTranslation() async {
+    private func performGeminiTranslation(force: Bool = false) async {
         guard !pages.isEmpty, currentPageIndex < pages.count else { return }
         
-        // If already translated, just toggle mode
-        if !visionBalloons.isEmpty {
-            translationMode = (translationMode == .translatedOverlay) ? .original : .translatedOverlay
+        // Critical: Concurrency guard - must be synchronous-ish check
+        if isGeminiTranslating && !force { return }
+        
+        // If already translated and NOT forcing, just toggle mode
+        if !force && !visionBalloons.isEmpty {
+            await MainActor.run {
+                translationMode = (translationMode == .translatedOverlay) ? .original : .translatedOverlay
+            }
             return
         }
         
-        isGeminiTranslating = true
+        await MainActor.run {
+            self.isGeminiTranslating = true
+            // If forcing, clear current to show loading state
+            if force {
+                self.visionBalloons = []
+            }
+        }
         let currentImageURL = pages[currentPageIndex]
         
         // Persistence ID: Use BookID or Filename as fallback
         let persistenceId = activeBookId ?? activeBookURL.deletingPathExtension().lastPathComponent
         
         // 1. Check Cache
-        if let cachedBalloons = GeminiService.shared.loadTranslations(forBook: persistenceId, pageIndex: currentPageIndex) {
+        if !force, let cachedBalloons = GeminiService.shared.loadTranslations(forBook: persistenceId, pageIndex: currentPageIndex) {
             print("📦 Using Cached Translations for Page \(currentPageIndex)")
             await MainActor.run {
                 self.visionBalloons = cachedBalloons
@@ -476,10 +530,90 @@ struct ComicReaderView: View {
         }
         
         do {
-            // 2. API Call
-            let balloons = try await GeminiService.shared.analyzeComicPage(image: image)
+            // 2. Surgical Text Masking (v3.0)
+            // We use Vision to find the EXACT ink of the text, and create a mask to cover ONLY that.
             
-            // 3. Save to Cache
+            // A. Detect Text Lines locally
+            let request = VNRecognizeTextRequest()
+            request.recognitionLevel = .accurate
+            let handler = VNImageRequestHandler(cgImage: image.cgImage!, options: [:])
+            try handler.perform([request])
+            let observations = request.results as? [VNRecognizedTextObservation] ?? []
+            
+            // B. Get Gemini Semantic Balloons
+            var balloons = try await GeminiService.shared.analyzeComicPage(image: image)
+            
+            // C. Map Text to Balloons and Create Masks (v4.0: Hybrid Organic Shapes)
+            // 1. EXTRACT HYBRID ANCHORS (Gemini Center Points)
+            // These are normalized (0-1) in the TranslatedBalloon struct (computed property .center)
+            let hybridSeeds = balloons.map { $0.center }
+            
+            // 2. Detect Bubbles using BubbleDetector (Organic Contours + Hybrid Anchors)
+            let localBubbles = await BubbleDetector.shared.detectBubbles(in: image, observations: observations, extraSeeds: hybridSeeds)
+            
+            for i in 0..<balloons.count {
+                // Gemini Box (Normalized 0..1000) -> Normalized 0..1
+                let gRef = balloons[i].boundingBox
+                let geminiRect = CGRect(
+                    x: CGFloat(gRef.xmin) / 1000.0,
+                    y: CGFloat(gRef.ymin) / 1000.0,
+                    width: CGFloat(gRef.xmax - gRef.xmin) / 1000.0,
+                    height: CGFloat(gRef.ymax - gRef.ymin) / 1000.0
+                )
+                
+                // 2. Find best matching local bubble (IoU)
+                // We want to overlay the translations on the ACTUAL balloon shape.
+                var bestMatchedBubble: DetectedBubble? = nil
+                var maxIoU: CGFloat = 0.0
+                
+                // Convert gemini rect to image coords for IoU check
+                let aiBox = geminiRect.applying(CGAffineTransform(scaleX: image.size.width, y: image.size.height))
+                
+                for bubble in localBubbles {
+                    let bubbleBox = bubble.boundingBox.applying(CGAffineTransform(scaleX: image.size.width, y: image.size.height))
+                    let intersection = aiBox.intersection(bubbleBox)
+                    let union = aiBox.union(bubbleBox)
+                    let iou = (intersection.width * intersection.height) / (union.width * union.height)
+                    
+                    // Threshold: > 10% overlap is usually enough given how different detector boxes can be
+                    if iou > 0.1 && iou > maxIoU {
+                        maxIoU = iou
+                        bestMatchedBubble = bubble
+                    }
+                }
+                
+                // 3. Assign Shape
+                if let match = bestMatchedBubble {
+                    balloons[i].localPath = match.path
+                    
+                    // Sample Background Color from the MATCHED bubble center
+                    let center = match.boundingBox.applying(CGAffineTransform(scaleX: image.size.width, y: image.size.height))
+                     if let cgImage = image.cgImage, let data = cgImage.dataProvider?.data, let ptr = CFDataGetBytePtr(data) {
+                         let bytesPerPixel = 4
+                         let bytesPerRow = cgImage.bytesPerRow
+                         let x = Int(center.midX)
+                         let y = Int(center.midY)
+                         if x >= 0 && x < cgImage.width && y >= 0 && y < cgImage.height {
+                             let off = y * bytesPerRow + x * bytesPerPixel
+                             let r = Double(ptr[off]) / 255.0
+                             let g = Double(ptr[off+1]) / 255.0
+                             let b = Double(ptr[off+2]) / 255.0
+                             let lum = 0.299*r + 0.587*g + 0.114*b
+                             if lum > 0.9 {
+                                 balloons[i].backgroundColor = Color(red: r, green: g, blue: b)
+                             } else {
+                                 balloons[i].backgroundColor = .white
+                             }
+                         }
+                     }
+                } else {
+                     // Fallback: If no local bubble matched, default to white background
+                     // We will likely render a default shape in the overlay view based on this.
+                     balloons[i].backgroundColor = .white
+                }
+            }
+            
+            // 5. Save to Cache
             if !balloons.isEmpty {
                  GeminiService.shared.saveTranslations(balloons, forBook: persistenceId, pageIndex: currentPageIndex)
             }

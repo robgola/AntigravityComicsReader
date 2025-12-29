@@ -8,7 +8,21 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+@interface OpenCVBalloonResult : NSObject
+@property(nonatomic, strong) UIImage *markedImage;
+@property(nonatomic, strong) NSArray<NSValue *> *balloonRects; // CGRects
+@property(nonatomic, strong)
+    NSArray<NSArray<NSValue *> *> *contours; // Array of Arrays of CGPoint
+@end
+
 @interface OpenCVWrapper : NSObject
+
+// v4.0: Marker Strategy (Legacy - Kept for reference or future toggling)
++ (OpenCVBalloonResult *)detectAndMarkBalloons:(UIImage *)image;
+
+// v5.0: Gemini-Guided GrabCut
++ (NSArray<NSValue *> *)refinedBalloonContour:(UIImage *)image
+                                     textRect:(CGRect)rect;
 
 // Image Enhancement (Pre-OCR)
 + (UIImage *)enhanceImageForOCR:(UIImage *)image;

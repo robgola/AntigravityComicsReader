@@ -1,36 +1,77 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="it">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ACR User Manual</title>
+    <title>Manuale Utente ACR</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: #1a1a1a;
+            background-color: #0a0a0a;
             color: #e0e0e0;
             line-height: 1.6;
-            padding: 20px;
-            max-width: 800px;
+            padding: 25px;
+            max-width: 900px;
             margin: 0 auto;
         }
-        h1, h2, h3 {
+
+        h1,
+        h2,
+        h3 {
             color: #ffffff;
-            border-bottom: 1px solid #333;
-            padding-bottom: 10px;
+            border-bottom: 2px solid #333;
+            padding-bottom: 12px;
+            margin-top: 30px;
         }
-        h1 { margin-top: 0; }
-        .chapter {
+
+        h1 {
+            font-size: 2.5em;
+            text-align: center;
+            color: #ffcc00;
+            border-bottom: none;
             margin-bottom: 40px;
-            background: #252525;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
         }
-        .step {
-            margin-bottom: 15px;
+
+        .chapter {
+            margin-bottom: 50px;
+            background: #151515;
+            padding: 25px;
+            border-radius: 12px;
+            border: 1px solid #333;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
         }
-        strong { color: #ffcc00; }
+
+        .feature-box {
+            background: #1e1e1e;
+            padding: 15px;
+            border-left: 4px solid #ffcc00;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+
+        strong {
+            color: #ffcc00;
+        }
+
+        ul {
+            padding-left: 20px;
+        }
+
+        li {
+            margin-bottom: 10px;
+        }
+
+        .hot-tip {
+            background: #1a3a3a;
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid #00ffff;
+            color: #00ffff;
+            font-size: 0.9em;
+            margin-top: 15px;
+        }
+
         code {
             background-color: #333;
             padding: 2px 5px;
@@ -39,92 +80,90 @@
         }
     </style>
 </head>
+
 <body>
 
+    <h1>Guida Ufficiale ACR</h1>
+
     <div class="chapter">
-        <h1>Introduction</h1>
-        <p><strong>ACR (Antigravity Comic Reader)</strong> is a specialized client designed to browse, manage, and read your comic book collection hosted on a <strong>Komga Server</strong>.</p>
-        <p>It provides a seamless experience for browsing libraries, exploring detailed series information, and reading comics with an optimized, immersive reader.</p>
+        <h2>Introduzione</h2>
+        <p><strong>ACR (Antigravity Comic Reader)</strong> è un'applicazione premium progettata per collezionisti e
+            lettori esigenti. Si collega al tuo server <strong>Komga</strong> per offrire un'esperienza di lettura
+            fluida, arricchita dall'Intelligenza Artificiale e da un'interfaccia "Neon" moderna.</p>
     </div>
 
     <div class="chapter">
-        <h2>Chapter 1: Configuration</h2>
-        <p>Before you begin, you must connect the application to your Komga server.</p>
-        <div class="step">
-            1. Navigate to the <strong>Settings</strong> tab in the top menu.
+        <h2>Capitolo 1: Opzioni e Configurazione</h2>
+        <p>Il cuore di ACR è la tua privacy. Nella scheda <strong>Opzioni</strong>, puoi configurare la connessione al
+            tuo database.</p>
+        <div class="feature-box">
+            <strong>Nuovo Flusso EDIT/SAVE:</strong> I tuoi dati sensibili sono protetti. Premi il tasto
+            <strong>EDIT</strong> in alto a destra per modificare l'indirizzo del server, la porta o le credenziali. I
+            campi si evidenzieranno con un colore giallo tenue per indicare lo stato attivo. Una volta terminato, premi
+            <strong>SAVE</strong> per bloccare nuovamente la configurazione.
         </div>
-        <div class="step">
-            2. You will see the Server Configuration panel. Currently, this displays the connected server:
-            <ul>
-                <li><strong>Server Name:</strong> The friendly name of your server.</li>
-                <li><strong>Address:</strong> The URL/IP of your Komga instance.</li>
-                <li><strong>Port:</strong> The connection port (default 8443).</li>
-                <li><strong>User:</strong> The logged-in user.</li>
-            </ul>
-        </div>
-        <p><em>Note: These settings are currently read-only and configured in the app constants.</em></p>
+        <p>Usa l'iconcina dell'occhio 👁️ per mostrare o nascondere la password e le chiavi API durante la modifica.
+            Tutti i dati sono salvati localmente sul tuo dispositivo e mai inviati a repository esterni.</p>
     </div>
 
     <div class="chapter">
-        <h2>Chapter 2: Browsing Libraries</h2>
-        <p>Use the <strong>Import</strong> tab to browse your server content.</p>
-        
-        <h3>Library View</h3>
-        <p>This is the main entry point. You will see a grid of all available libraries on your server.</p>
+        <h2>Capitolo 2: Importare i Fumetti (Online)</h2>
+        <p>Usa la scheda <strong>Importa</strong> per sfogliare il catalogo del tuo server Komga in tempo reale.</p>
         <ul>
-            <li>Tap a <strong>Library Card</strong> to enter that library.</li>
-            <li>The card displays the library name and a representative cover image.</li>
-        </ul>
-
-        <h3>Series List</h3>
-        <p>Once inside a library, you will browse its Series.</p>
-        <ul>
-            <li><strong>Folders vs. Flat List:</strong> You can toggle between a folder-based view (directories) and a flat alphabetical list of series using the toggle button in the header.</li>
-            <li><strong>Folder Navigation:</strong> Tap on folders to drill down into sub-directories.</li>
-            <li><strong>Series Selection:</strong> Tap on a Series card to view its books.</li>
-        </ul>
-
-        <h3>Book List (Series Detail)</h3>
-        <p>This view displays all books within a selected series.</p>
-        <ul>
-            <li><strong>Hero Section:</strong> The layout features a highlighted "Hero" section at the top displaying the focused book's cover and metadata (Writer, Penciller, Inker, Summary).</li>
-            <li><strong>Selection:</strong> Tap any book in the bottom grid to focus it in the Hero section.</li>
-            <li><strong>Multi-Select:</strong> Tap the background to deselect. (Selecting multiple books for batch actions is a planned feature).</li>
+            <li><strong>Navigazione Intelligente:</strong> Puoi navigare tra le librerie e scegliere se visualizzare le
+                serie in una lista piatta o rispettando la struttura a <strong>cartelle</strong> del server (pulsante in
+                alto a destra).</li>
+            <li><strong>Hero View:</strong> Selezionando un fumetto, vedrai una sezione "Hero" in alto con la copertina
+                ingrandita e tutti i <strong>metadati</strong> estratti (Scrittore, Disegnatore, Inchiostratore).</li>
+            <li><strong>Read on the Fly:</strong> Premi il tasto giallo per iniziare a leggere immediatamente in
+                streaming.</li>
+            <li><strong>Importa:</strong> Scarica il fumetto nella tua memoria locale per la lettura offline.</li>
         </ul>
     </div>
 
     <div class="chapter">
-        <h2>Chapter 3: Reading</h2>
-        <p>The core experience of ACR is reading your comics.</p>
-        <div class="step">
-            1. From the Book List, tap the yellow <strong>Read</strong> button in the Hero section.
-        </div>
-        <div class="step">
-            2. The book will download (streaming) and open in the <strong>Reader</strong>.
-        </div>
-        
-        <h3>Reader Controls</h3>
+        <h2>Capitolo 3: La tua Libreria (Offline)</h2>
+        <p>La scheda <strong>Libreria</strong> è la tua collezione personale scaricata sul dispositivo.</p>
         <ul>
-            <li><strong>Turn Pages:</strong> Tap the left or right edges of the screen, or swipe.</li>
-            <li><strong>Menu:</strong> Tap the center of the screen to toggle the controls (Top Bar and Thumbnail slider).</li>
-            <li><strong>Thumbnails:</strong> Use the bottom slider to quickly jump to any page.</li>
-            <li><strong>Close:</strong> Tap the "Done" button in the top left to return to the book list.</li>
+            <li><strong>Neon UI:</strong> Le cartelle sono visualizzate come eleganti scatole da collezione con
+                anteprime raggruppate.</li>
+            <li><strong>Continua a Leggere:</strong> Un carosello superiore ti mostra gli ultimi fumetti aperti, con i
+                metadati aggiornati e il numero dell'albo (es. #05) estratto dai file <code>ComicInfo.xml</code>.</li>
+            <li><strong>Filtri:</strong> Usa la barra superiore per filtrare rapidamente tra le diverse librerie
+                (Marvel, DC, Indie, ecc.).</li>
         </ul>
     </div>
 
     <div class="chapter">
-        <h2>Chapter 4: Importing for Offline</h2>
-        <p>You can download books to your local device library ("My Library").</p>
-        <div class="step">
-            1. In the Book List, select a book (or view it in the Hero section).
+        <h2>Capitolo 4: Funzioni AI (Gemini)</h2>
+        <p>ACR integra la potenza di <strong>Google Gemini</strong> per migliorare la tua esperienza.</p>
+        <ul>
+            <li><strong>Story Recap:</strong> Non ricordi cosa è successo nell'albo precedente? Nella visualizzazione
+                dettaglio, premi "Cosa è successo finora..." per ottenere un riassunto generato dall'AI basato sulla
+                serie e sul volume corrente.</li>
+            <li><strong>AI Translation:</strong> Nel Reader, premi il tasto traduzione per far riconoscere all'AI i
+                balloon di testo e tradurli istantaneamente in italiano. Le traduzioni vengono <strong>salvate
+                    localmente</strong>, così potrai rileggerle istantaneamente senza consumare altra quota API.</li>
+        </ul>
+        <div class="hot-tip">
+            Monitora il tuo consumo API in alto a destra grazie all'indicatore di quota (Quota Overlay).
         </div>
-        <div class="step">
-            2. Tap the <strong>Import</strong> button.
-        </div>
-        <div class="step">
-            3. Confirm the download. The book will be saved to your device and appear in the <strong>Library</strong> tab (Local Library).
-        </div>
+    </div>
+
+    <div class="chapter">
+        <h2>Capitolo 5: Il Reader Immersivo</h2>
+        <p>Progettato per non distrarti dalla lettura.</p>
+        <ul>
+            <li><strong>Fullscreen Totale:</strong> Nessuna barra di sistema disturba la tua immersione.</li>
+            <li><strong>Zoom Nativo:</strong> Pizzica lo schermo (pinch-to-zoom) per ingrandire ogni dettaglio delle
+                tavole.</li>
+            <li><strong>Slide e Navigazione:</strong> Usa lo slider inferiore per muoverti velocemente nel fumetto o le
+                frecce laterali per cambiare pagina.</li>
+            <li><strong>Condivisione:</strong> Hai trovato una tavola magnifica? Usa il menu di condivisione iOS
+                integrato per salvarla o inviarla agli amici.</li>
+        </ul>
     </div>
 
 </body>
+
 </html>

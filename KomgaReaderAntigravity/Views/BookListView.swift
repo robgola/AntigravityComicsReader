@@ -9,18 +9,21 @@ struct BookListView: View {
     @State private var errorMessage: String?
     
     // State for Focused Book (Top Hero View)
-    @State private var focusedBook: Book?
+    @State private var selectedBookId: String?
+    
+    var focusedBook: Book? {
+        books.first(where: { $0.id == selectedBookId })
+    }
     
     // State for Multi-Selection
     @State private var selectedBookIds: Set<String> = []
+    @State private var isSelectionMode = false
     
     // State for navigation/actions
     @State private var navigationPath = NavigationPath() // If using Stack, but here we use simple states
     @State private var selectedBookURL: URL? // For Reader Navigation
     @State private var downloadingBookId: String?
     @State private var downloadProgress: Double = 0.0
-    // State for Metadata Expansion
-    @State private var isMetadataExpanded = false
     
     // Download confirmation
     @State private var showImportConfirmation = false
@@ -29,30 +32,27 @@ struct BookListView: View {
     @State private var pendingConflicts: [PendingDownloadItem] = []
     @State private var showConflictAlert = false
     
-    // Grid Config - Tighter Spacing (5)
-    let columns = Array(repeating: GridItem(.flexible(), spacing: 5), count: 5)
+    // Grid Config - Spacing (15)
+    let columns = Array(repeating: GridItem(.flexible(), spacing: 15), count: 5)
     
     // Image Cache
     @State private var bookCovers: [String: UIImage] = [:]
-    @State private var heroImage: UIImage? = nil // High Res Hero Image
 
     var body: some View {
         ZStack {
             // Global Background: Blurred Cover
             GeometryReader { geo in
-                Group {
-                    if let img = heroImage ?? bookCovers[focusedBook?.id ?? ""] {
+                    if let book = focusedBook, let img = bookCovers[book.id] {
                         Image(uiImage: img)
                             .resizable()
                             .aspectRatio(contentMode: .fill)
                             .frame(width: geo.size.width, height: geo.size.height)
                             .clipped()
-                            .blur(radius: 15)
+                            .blur(radius: 20)
                             .opacity(0.4)
                     } else {
                         Color(white: 0.15)
                     }
-                }
             }
             .ignoresSafeArea(edges: [.bottom, .horizontal])
             // Overlay simplified dark layer to ensure text contrast
@@ -81,19 +81,45 @@ struct BookListView: View {
                         
                         HStack {
                             // Back Button (Zone 2 Left)
-                            Button(action: { dismiss() }) {
+                            Button(action: { 
+                                if isSelectionMode {
+                                    isSelectionMode = false
+                                    selectedBookIds.removeAll()
+                                } else {
+                                    dismiss() 
+                                }
+                            }) {
                                 HStack(spacing: 4) {
-                                    Image(systemName: "chevron.left")
-                                    Text("Indietro") // Localized
+                                    Image(systemName: isSelectionMode ? "xmark" : "chevron.left")
+                                    Text(isSelectionMode ? "Annulla" : "Indietro") // Localized
                                 }
                                 .font(.headline)
                                 .foregroundColor(.white)
-                                .padding(.vertical, 12)
-                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
+                                .padding(.horizontal, 12)
                                 .background(Color.white.opacity(0.1))
                                 .cornerRadius(8)
                             }
+                            
                             Spacer()
+                            
+                            // Select Button (Zone 2 Right)
+                            Button(action: {
+                                withAnimation {
+                                    isSelectionMode.toggle()
+                                    if !isSelectionMode {
+                                        selectedBookIds.removeAll()
+                                    }
+                                }
+                            }) {
+                                Text(isSelectionMode ? "Fine" : "Seleziona")
+                                    .font(.headline)
+                                    .foregroundColor(.yellow)
+                                    .padding(.vertical, 8)
+                                    .padding(.horizontal, 12)
+                                    .background(Color.white.opacity(0.1))
+                                    .cornerRadius(8)
+                            }
                         }
                         .padding(.horizontal)
                         .padding(.vertical, 8)
@@ -113,145 +139,42 @@ struct BookListView: View {
                     ScrollView {
                          // MARK: - Top Hero Section (Detail View)
                          if let book = focusedBook {
-                             VStack(alignment: .leading, spacing: 16) {
-                                  // Details Split
-                                 HStack(alignment: .top, spacing: 20) {
-                                     // Cover Art
-                                      Group {
-                                         if let img = heroImage {
-                                             Image(uiImage: img)
-                                                 .resizable()
-                                                 .renderingMode(.original)
-                                                 .aspectRatio(contentMode: .fill)
-                                                 .frame(width: 240, height: 360, alignment: .topLeading)
-                                                 .clipped()
-                                                 .cornerRadius(8)
-                                                 .shadow(radius: 5)
-                                                 .opacity(1)
-                                         } else if let img = bookCovers[book.id] {
-                                             Image(uiImage: img)
-                                                 .resizable()
-                                                 .aspectRatio(contentMode: .fill)
-                                                 .frame(width: 240, height: 360, alignment: .topLeading)
-                                                 .clipped()
-                                                 .cornerRadius(8)
-                                                 .shadow(radius: 5)
-                                         } else {
-                                             Rectangle()
-                                                 .fill(Color.gray.opacity(0.3))
-                                                 .frame(width: 240, height: 360)
-                                                 .cornerRadius(8)
-                                                 .overlay(ProgressView())
-                                         }
-                                     }
-                                     
-                                     // Details Column
-                                     VStack(alignment: .leading, spacing: 8) {
-                                         // Title
-                                         if !book.metadata.title.isEmpty {
-                                              Text(book.metadata.title).font(.title2).bold().foregroundColor(.white)
-                                         } else {
-                                              Text(book.name).font(.title2).bold().foregroundColor(.white)
-                                         }
-                                         
-                                         // Number
-                                         if !book.metadata.number.isEmpty {
-                                             Text("# \(book.metadata.number)") // Space added
-                                                 .font(.title3).foregroundColor(.yellow)
-                                         }
-                                         
-                                         // Metadata Fields (Uniform Size)
-                                         Group {
-                                             if let writer = book.metadata.writer {
-                                                 HStack(alignment: .top) {
-                                                     Text("Writer:").font(.caption).bold().foregroundColor(.gray).frame(width: 70, alignment: .leading)
-                                                     Text(writer).font(.caption).foregroundColor(.white)
-                                                 }
-                                             }
-                                             if let penciller = book.metadata.penciller {
-                                                 HStack(alignment: .top) {
-                                                     Text("Penciller:").font(.caption).bold().foregroundColor(.gray).frame(width: 70, alignment: .leading)
-                                                     Text(penciller).font(.caption).foregroundColor(.white)
-                                                 }
-                                             }
-                                             if let inker = book.metadata.inker {
-                                                 HStack(alignment: .top) {
-                                                     Text("Inker:").font(.caption).bold().foregroundColor(.gray).frame(width: 70, alignment: .leading)
-                                                     Text(inker).font(.caption).foregroundColor(.white)
-                                                 }
-                                             }
-                                         }
-                                         
-                                         // Summary with Read More
-                                         if !book.metadata.summary.isEmpty {
-                                             VStack(alignment: .leading, spacing: 4) {
-                                                 Text(book.metadata.summary)
-                                                     .font(.caption) // Reduced size
-                                                     .foregroundColor(.white.opacity(0.9))
-                                                     .lineLimit(isMetadataExpanded ? nil : 4)
-                                                     .fixedSize(horizontal: false, vertical: true) // Allow growth
-                                                 
-                                                 Button(action: { withAnimation { isMetadataExpanded.toggle() } }) {
-                                                     Text(isMetadataExpanded ? "less..." : "more...")
-                                                         .font(.caption)
-                                                         .bold()
-                                                         .foregroundColor(.yellow)
-                                                 }
-                                             }
-                                         }
-                                         
-                                          // Action Buttons (60% Wider)
-                                         HStack(spacing: 12) {
-                                              Button(action: { handleReadRequest() }) {
-                                                  Text("Leggi")
-                                                    .font(.headline)
-                                                    .foregroundColor(.black)
-                                                    .frame(minWidth: 120) // Increased width
-                                                    .padding(.vertical, 12)
-                                                    .background(Color.yellow)
-                                                    .cornerRadius(25)
-                                              }
-                                              Button(action: { handleImportRequest() }) {
-                                                  Text("Scarica")
-                                                    .font(.headline)
-                                                    .foregroundColor(.white)
-                                                    .frame(minWidth: 120) // Increased width
-                                                    .padding(.vertical, 12)
-                                                    .background(RoundedRectangle(cornerRadius: 25).stroke(Color.white, lineWidth: 2))
-                                              }
-                                         }
-                                         .padding(.top, 10)
-                                     }
-                                     Spacer() // Push everything to the left
-                                }
-                                .padding(.horizontal)
-                            }
-                            .padding(.bottom, 20)
-                            .padding(.top, 20)
-                            
-                            // Separator
-                            Rectangle()
-                                .fill(Color.white.opacity(0.2))
-                                .frame(height: 1)
-                                .padding(.vertical, 10)
-                                .padding(.horizontal, 20)
+                             HeroDetailView(
+                                 book: book,
+                                 bookCovers: bookCovers,
+                                 onRead: { handleReadRequest() },
+                                 onImport: { handleImportRequest() }
+                             )
+                             .id(book.id) // Force fresh identity
+                             
+                             // Separator
+                             Rectangle()
+                                 .fill(Color.white.opacity(0.2))
+                                 .frame(height: 1)
+                                 .padding(.vertical, 10)
+                                 .padding(.horizontal, 20)
                          }
 
                         // MARK: - Bottom Grid Section
-                        LazyVGrid(columns: columns, spacing: 20) { // Spacing 20
+                        LazyVGrid(columns: columns, spacing: 15) { // Spacing 15
                             ForEach(books) { book in
                                 VStack(spacing: 8) {
                                     // Cover
                                     ZStack(alignment: .bottomTrailing) {
-                                        if let img = bookCovers[book.id] {
-                                            Image(uiImage: img)
-                                                .resizable()
-                                                .aspectRatio(contentMode: .fill)
-                                                .frame(width: 106, height: 160, alignment: .trailing)
+                                        if let cover = bookCovers[book.id] {
+                                            // Robust Cropping: 2:3 Container with Trailing (Right) Alignment
+                                            Color.clear
+                                                .aspectRatio(0.66, contentMode: .fit)
+                                                .overlay(
+                                                    Image(uiImage: cover)
+                                                        .resizable()
+                                                        .aspectRatio(contentMode: .fill),
+                                                    alignment: .trailing
+                                                )
                                                 .clipped()
                                                 .contentShape(Rectangle())
                                         } else {
-                                             Rectangle().fill(Color.gray.opacity(0.3)).frame(width: 106, height: 160)
+                                             Rectangle().fill(Color.gray.opacity(0.3)).aspectRatio(0.66, contentMode: .fit)
                                         }
                                         // Selection overlay...
                                         if selectedBookIds.contains(book.id) {
@@ -262,9 +185,22 @@ struct BookListView: View {
                                             .frame(width: 106, height: 160)
                                         }
                                     }
-                                    .frame(width: 106, height: 160)
-                                    .onTapGesture { focusedBook = book }
-                                    .onLongPressGesture { toggleSelection(for: book) }
+                                    .aspectRatio(0.66, contentMode: .fit)
+                                     .onTapGesture { 
+                                         withAnimation {
+                                             if isSelectionMode {
+                                                 toggleSelection(for: book)
+                                             } else {
+                                                 selectedBookId = book.id 
+                                             }
+                                         }
+                                     }
+                                    .onLongPressGesture { 
+                                        withAnimation {
+                                            isSelectionMode = true
+                                            toggleSelection(for: book)
+                                        }
+                                    }
                                     
                                     // Custom Metadata Display (Title + Issue)
                                     VStack(spacing: 2) {
@@ -272,13 +208,14 @@ struct BookListView: View {
                                             .font(.caption2)
                                             .bold()
                                             .lineLimit(2)
-                                            .foregroundColor(focusedBook?.id == book.id ? .yellow : .white)
+                                             .foregroundColor(selectedBookId == book.id ? .yellow : (isSelectionMode && selectedBookIds.contains(book.id) ? .yellow : .white))
                                             .multilineTextAlignment(.center)
                                         
                                         if !book.metadata.number.isEmpty {
                                             Text("#\(book.metadata.number)")
                                                 .font(.caption2)
-                                                .foregroundColor(.gray)
+                                                .bold()
+                                                .foregroundColor(.white)
                                         }
                                     }
                                     .frame(width: 106)
@@ -286,21 +223,77 @@ struct BookListView: View {
                             }
                         }
                         .padding()
-                        .padding(.bottom, 40)
+                        .padding(.bottom, 100)
                      }
                 }
-                .onChange(of: focusedBook) { newBook in
-                    guard let book = newBook else { return }
-                    heroImage = nil 
-                    Task {
-                        heroImage = await KomgaService.shared.fetchBookPageImage(bookId: book.id, pageNumber: 1)
+            }
+            
+            // Bulk Action Bar (Overlay at bottom)
+            if isSelectionMode {
+                VStack {
+                    Spacer()
+                    HStack(spacing: 0) {
+                        Button(action: {
+                            withAnimation {
+                                let allIds = books.map { $0.id }
+                                selectedBookIds = Set(allIds)
+                            }
+                        }) {
+                            VStack(spacing: 4) {
+                                Image(systemName: "checkmark.circle.badge.questionmark")
+                                Text("Tutti").font(.caption2).bold()
+                            }
+                            .foregroundColor(.white)
+                            .frame(width: 60)
+                        }
+                        
+                        Spacer()
+                        
+                        Button(action: { handleImportRequest() }) {
+                            HStack {
+                                Image(systemName: "arrow.down.circle.fill")
+                                Text("Scarica (\(selectedBookIds.count))")
+                            }
+                            .font(.headline)
+                            .foregroundColor(.black)
+                            .padding(.horizontal, 24)
+                            .padding(.vertical, 14)
+                            .background(selectedBookIds.isEmpty ? Color.gray : Color.yellow)
+                            .cornerRadius(30)
+                            .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: 5)
+                        }
+                        .disabled(selectedBookIds.isEmpty)
+                        
+                        Spacer()
+                        
+                        Button(action: {
+                            withAnimation {
+                                selectedBookIds.removeAll()
+                            }
+                        }) {
+                            VStack(spacing: 4) {
+                                Image(systemName: "trash")
+                                Text("Svuota").font(.caption2).bold()
+                            }
+                            .foregroundColor(.white)
+                            .frame(width: 60)
+                        }
                     }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 20)
+                    .padding(.bottom, 20) // Safe area padding
+                    .background(
+                        VisualEffectView(effect: UIBlurEffect(style: .systemThinMaterialDark))
+                            .overlay(Rectangle().frame(height: 1).foregroundColor(Color.white.opacity(0.1)), alignment: .top)
+                            .ignoresSafeArea()
+                    )
                 }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onTapGesture {
-            selectedBookIds.removeAll()
+            // Background tap logic
         }
         .navigationBarHidden(true)
         .toolbar(.hidden, for: .navigationBar)
@@ -355,8 +348,8 @@ struct BookListView: View {
                 let list = try await KomgaService.shared.fetchBooks(for: series.id)
                 self.books = list.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
                 
-                if self.focusedBook == nil || !self.books.contains(where: { $0.id == self.focusedBook?.id }) {
-                    self.focusedBook = self.books.first
+                if self.selectedBookId == nil || !self.books.contains(where: { $0.id == self.selectedBookId }) {
+                    self.selectedBookId = self.books.first?.id
                 }
                 
                 for book in list {
@@ -379,7 +372,7 @@ struct BookListView: View {
             selectedBookIds.remove(book.id)
         } else {
             selectedBookIds.insert(book.id)
-            focusedBook = book // Also focus it
+            selectedBookId = book.id // Also focus it
         }
     }
     
@@ -486,5 +479,164 @@ struct BookListView: View {
             DownloadManager.shared.addToQueue(bookId: item.bookId, bookName: item.bookName, targetFolder: item.targetFolder)
         }
         pendingConflicts.removeAll()
+    }
+}
+
+// MARK: - Subviews
+
+struct HeroDetailView: View {
+    let book: Book
+    let bookCovers: [String: UIImage]
+    let onRead: () -> Void
+    let onImport: () -> Void
+    
+    @State private var heroImage: UIImage?
+    @State private var isExpanded: Bool = false
+    
+    init(book: Book, bookCovers: [String : UIImage], onRead: @escaping () -> Void, onImport: @escaping () -> Void) {
+        self.book = book
+        self.bookCovers = bookCovers
+        self.onRead = onRead
+        self.onImport = onImport
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+             // Details Split
+            HStack(alignment: .top, spacing: 20) {
+                // Cover Art
+                 Group {
+                    if let img = heroImage {
+                        Image(uiImage: img)
+                            .resizable()
+                            .renderingMode(.original)
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 240, height: 360, alignment: .topTrailing)
+                            .clipped()
+                            .cornerRadius(8)
+                            .shadow(radius: 5)
+                    } else if let img = bookCovers[book.id] {
+                        Image(uiImage: img)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 240, height: 360, alignment: .topTrailing)
+                            .clipped()
+                            .cornerRadius(8)
+                            .shadow(radius: 5)
+                    } else {
+                        Rectangle()
+                            .fill(Color.gray.opacity(0.3))
+                            .frame(width: 240, height: 360)
+                            .cornerRadius(8)
+                            .overlay(ProgressView())
+                    }
+                }
+                
+                // Details Column
+                VStack(alignment: .leading, spacing: 8) {
+                    // Title
+                    Text(book.metadata.title.isEmpty ? book.name : book.metadata.title)
+                        .font(.title2)
+                        .bold()
+                        .foregroundColor(.white)
+                    
+                    // Number (Styled Bold White)
+                    if !book.metadata.number.isEmpty {
+                        Text("#\(book.metadata.number)")
+                            .font(.title3)
+                            .bold()
+                            .foregroundColor(.white)
+                    }
+                    
+                    // Metadata Fields
+                    Group {
+                        if let writer = book.metadata.writer {
+                            MetadataRow(label: "Writer:", value: writer)
+                        }
+                        if let penciller = book.metadata.penciller {
+                            MetadataRow(label: "Penciller:", value: penciller)
+                        }
+                        if let inker = book.metadata.inker {
+                            MetadataRow(label: "Inker:", value: inker)
+                        }
+                    }
+                    
+                    // Summary with Read More
+                    if !book.metadata.summary.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(book.metadata.summary)
+                                .font(.caption)
+                                .foregroundColor(.white.opacity(0.9))
+                                .lineLimit(isExpanded ? nil : 4)
+                                .fixedSize(horizontal: false, vertical: true)
+                            
+                            Button(action: { withAnimation { isExpanded.toggle() } }) {
+                                Text(isExpanded ? "less..." : "more...")
+                                     .font(.caption)
+                                     .bold()
+                                     .foregroundColor(.yellow)
+                            }
+                        }
+                    }
+                    
+                    // Action Buttons
+                    HStack(spacing: 12) {
+                         Button(action: onRead) {
+                             Text("Leggi")
+                               .font(.headline)
+                               .foregroundColor(.black)
+                               .frame(minWidth: 120)
+                               .padding(.vertical, 12)
+                               .background(Color.yellow)
+                               .cornerRadius(25)
+                         }
+                         Button(action: onImport) {
+                             Text("Scarica")
+                               .font(.headline)
+                               .foregroundColor(.white)
+                               .frame(minWidth: 120)
+                               .padding(.vertical, 12)
+                               .background(RoundedRectangle(cornerRadius: 25).stroke(Color.white, lineWidth: 2))
+                         }
+                    }
+                    .padding(.top, 10)
+                }
+                Spacer()
+            }
+            .padding(.horizontal)
+        }
+        .padding(.top, 20)
+        .padding(.bottom, 20)
+        .task(id: book.id) {
+            // Load High Res Cover
+            heroImage = nil 
+            isExpanded = false // Reset expansion when book changes
+            if let img = await KomgaService.shared.fetchBookPageImage(bookId: book.id, pageNumber: 1) {
+                heroImage = img
+            }
+        }
+    }
+}
+
+struct MetadataRow: View {
+    let label: String
+    let value: String
+    var body: some View {
+        HStack(alignment: .top) {
+            Text(label).font(.caption).bold().foregroundColor(.gray).frame(width: 70, alignment: .leading)
+            Text(value).font(.caption).foregroundColor(.white)
+        }
+    }
+}
+
+// MARK: - VisualEffectView Helper
+struct VisualEffectView: UIViewRepresentable {
+    var effect: UIVisualEffect?
+    func makeUIView(context: Context) -> UIVisualEffectView {
+        let view = UIVisualEffectView(effect: effect)
+        return view
+    }
+    func updateUIView(_ uiView: UIVisualEffectView, context: Context) {
+        uiView.effect = effect
     }
 }

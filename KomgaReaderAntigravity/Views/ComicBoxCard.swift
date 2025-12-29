@@ -49,12 +49,16 @@ struct ComicBoxCard: View {
                     
                     ZStack(alignment: .top) {
                         // MAIN CONTENT: The Image (Spanning Entire Box)
-                if let cover = processedImage {
-                    Image(uiImage: cover)
-                        .resizable()
-                        .scaledToFill() // Fill the width (since we constrain width below)
-                        .frame(width: geo.size.width - 24) // Match the WIDEST part (Lid)
-                        .frame(height: boxHeight, alignment: .top) // Clip to Box Height, Anchor at Top
+                if let img = processedImage {
+                    Color.clear
+                        .aspectRatio(0.66, contentMode: .fit)
+                        .overlay(
+                            Image(uiImage: img)
+                                .resizable()
+                                .aspectRatio(contentMode: .fill),
+                            alignment: .trailing
+                        )
+                        .clipped()
                         
                         // Mask to Box Shape
                         .mask(

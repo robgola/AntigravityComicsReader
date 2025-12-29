@@ -34,10 +34,13 @@ struct LibraryBoxView: View {
                         // Image (Bottom Slice)
                         if let img = coverImage {
                             Image(uiImage: img)
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(width: totalW, height: totalH) // Master Frame
-                                .frame(width: bodyW, height: bodyH, alignment: .bottom) // Clip Bottom
+                                .aspectRatio(0.66, contentMode: .fit)
+                                .overlay(
+                                    Image(uiImage: img)
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fill),
+                                    alignment: .trailing
+                                )
                                 .clipped()
                         }
                         
@@ -55,10 +58,13 @@ struct LibraryBoxView: View {
                         // Image (Top Slice)
                         if let img = coverImage {
                             Image(uiImage: img)
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(width: totalW, height: totalH) // Master Frame
-                                .frame(width: lidW, height: lidH, alignment: .top) // Clip Top
+                                .aspectRatio(0.66, contentMode: .fit)
+                                .overlay(
+                                    Image(uiImage: img)
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fill),
+                                    alignment: .trailing
+                                )
                                 .clipped()
                                 .padding(2) // Slight whitespace border on lid usually looks authentic
                         }
@@ -69,7 +75,7 @@ struct LibraryBoxView: View {
                     .shadow(color: .black.opacity(0.4), radius: 3, x: 0, y: 2) // Lid Shadow
                 }
             }
-            .aspectRatio(0.75, contentMode: .fit) // Keep the Box Aspect Ratio
+            .aspectRatio(0.66, contentMode: .fit) // Keep the Box Aspect Ratio (2:3)
             
             // Text Label
             Text(name)

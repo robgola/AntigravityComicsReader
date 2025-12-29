@@ -15,7 +15,7 @@ class BubbleDetector {
     
     private init() {}
     
-    func detectBubbles(in image: UIImage, observations: [VNRecognizedTextObservation]) async -> [DetectedBubble] {
+    func detectBubbles(in image: UIImage, observations: [VNRecognizedTextObservation], extraSeeds: [CGPoint] = []) async -> [DetectedBubble] {
         return await Task.detached(priority: .userInitiated) {
             // 1. Downsample for speed (width ~500px)
             let targetWidth: CGFloat = 500
@@ -151,7 +151,7 @@ class BubbleDetector {
                 
                 // 1. Check Brightness (0-255)
                 let brightness = (bgR + bgG + bgB) / 3
-                let isDark = brightness < 200 // Threshold for "Light" background (was 60 for border, here we want LIGHT background)
+                let isDark = brightness < 150 // Lowered from 200 to 150 to detect vintage/beige paper
                 
                 // 2. Check Saturation (Approximate)
                 // |R-G| + |R-B| + |G-B| is a rough proxy for saturation
@@ -180,6 +180,61 @@ class BubbleDetector {
                 seeds.append((centerX, centerY, bgR, bgG, bgB))
             }
             
+            // 3b. INJECT HYBRID ANCHORS (Gemini Center Points) with SMART SAMPLING
+            // These are normalized coordinates (0-1) from Gemini's "center_point"
+            for point in extraSeeds {
+                // Denormalize to resized image coordinates
+                let px = Int(point.x * CGFloat(width))
+                let py = Int(point.y * CGFloat(height))
+                
+                guard px >= 0 && px < width && py >= 0 && py < height else { continue }
+                
+                // SMART SAMPLING:
+                // If the exact center is text (Dark), we must find the background color nearby.
+                // We spiral out up to 20 pixels to find a "Light" pixel.
+                
+                var bestColor: (r: Int, g: Int, b: Int)? = nil
+                
+                // 1. Try exact center first
+                if let (r, g, b) = self.sampleColor(at: px, y: py, width: width, height: height, bytesPerRow: bytesPerRow, ptr: originalPtr) {
+                    let brightness = (r + g + b) / 3
+                    if brightness > 150 {
+                        bestColor = (r, g, b) // Found light background immediately
+                    }
+                }
+                
+                // 2. If not found or too dark, spiral search
+                if bestColor == nil {
+                    let searchRadius = 20
+                    searchLoop: for r in stride(from: 2, through: searchRadius, by: 2) {
+                        for dy in -r...r {
+                            for dx in -r...r {
+                                // Only check the perimeter of the box to save time
+                                if abs(dx) != r && abs(dy) != r { continue }
+                                
+                                let sx = px + dx
+                                let sy = py + dy
+                                
+                                if let (r, g, b) = self.sampleColor(at: sx, y: sy, width: width, height: height, bytesPerRow: bytesPerRow, ptr: originalPtr) {
+                                    let brightness = (r + g + b) / 3
+                                    if brightness > 150 {
+                                        bestColor = (r, g, b)
+                                        // Update seed position to this clear spot to ensure flood fill starts well
+                                        // actually, keep original seed but use this TARGET color?
+                                        // Better to start flood fill from the clean spot.
+                                        // But we add it as a new seed.
+                                        seeds.append((sx, sy, r, g, b))
+                                        break searchLoop // Found a good spot!
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else if let c = bestColor {
+                     seeds.append((px, py, c.r, c.g, c.b))
+                }
+            }
+            
             // 4. FLOOD FILL
             var visited = Array(repeating: false, count: width * height)
             var detectedBubbles: [DetectedBubble] = []
@@ -197,7 +252,7 @@ class BubbleDetector {
                 let targetG = seed.g
                 let targetB = seed.b
                 
-                // Restore Standard Tolerance
+                // Restore Tolerance
                 let tolerance = 40
                 let edgeThreshold = 40
                 
@@ -403,5 +458,61 @@ class BubbleDetector {
     nonisolated private func normalizePath(_ path: Path, width: CGFloat, height: CGFloat) -> Path {
         let transform = CGAffineTransform(scaleX: 1.0 / width, y: 1.0 / height)
         return path.applying(transform)
+    }
+    
+    nonisolated private func sampleColor(at x: Int, y: Int, width: Int, height: Int, bytesPerRow: Int, ptr: UnsafePointer<UInt8>) -> (r: Int, g: Int, b: Int)? {
+        // Robust sampling: Check 5x5 area around point to avoid noise
+        let range = -2...2
+        var rSum = 0, gSum = 0, bSum = 0, count = 0
+        
+        for dy in range {
+            for dx in range {
+                let px = x + dx
+                let py = y + dy
+                
+                if px >= 0 && px < width && py >= 0 && py < height {
+                    let off = py * bytesPerRow + px * 4
+                    let r = Int(ptr[off])
+                    let g = Int(ptr[off+1])
+                    let b = Int(ptr[off+2])
+                    
+                    // Filter out very dark pixels (ink)
+                    // If brightness < 50, it's likely text/ink, not background
+                    // UNLESS the background ITSELF is dark (detected below)
+                    // For now, simple averager
+                    rSum += r
+                    gSum += g
+                    bSum += b
+                    count += 1
+                }
+            }
+        }
+        
+        if count == 0 { return nil }
+        
+        let bgR = rSum / count
+        let bgG = gSum / count
+        let bgB = bSum / count
+        
+        // --- VALIDATION logic reused from original code ---
+        // 1. Check Brightness (0-255)
+        let brightness = (bgR + bgG + bgB) / 3
+        let isDark = brightness < 50 // Severely lowered threshold (was 200). Only skip absolute void.
+        
+        // 2. Check Saturation
+        // let saturation = abs(bgR - bgG) + abs(bgR - bgB) + abs(bgG - bgB)
+        // let isVivid = saturation > 150
+        
+        // Exception: Allow Yellowish
+        let isYellowish = (bgR > 200 && bgG > 200 && bgB < 200)
+        
+        // Exception: Allow Light Blueish
+        let isBlueish = (bgB > 200 && bgG > 180 && bgR > 180)
+        
+        if isDark && !isYellowish && !isBlueish {
+             if brightness < 30 { return nil }
+        }
+        
+        return (bgR, bgG, bgB)
     }
 }

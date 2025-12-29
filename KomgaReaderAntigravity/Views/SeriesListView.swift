@@ -680,7 +680,7 @@ struct FolderClusterView: View {
             RoundedRectangle(cornerRadius: 12)
                 .fill(Color(white: 0.2))
                 .shadow(radius: 4)
-                .frame(width: 120, height: 120) // Widened (was 100)
+                .frame(width: 110, height: 165) // Adjusted for 2:3 tall boxes
             
             // Render up to 3 covers in a scattered pile
             if collageImages.isEmpty {
@@ -694,7 +694,7 @@ struct FolderClusterView: View {
                     Image(uiImage: img)
                         .resizable()
                         .aspectRatio(contentMode: .fill)
-                        .frame(width: 90, height: 110) // Widened (was 80)
+                        .frame(width: 80, height: 120) // Proportions 2:3
                         .clipped()
                         .cornerRadius(4)
                         .shadow(radius: 2)
@@ -716,7 +716,7 @@ struct FolderClusterView: View {
                         .padding(4)
                 }
             }
-            .frame(width: 120, height: 120) // Match new width
+            .frame(width: 110, height: 165) // Match new proportions
         }
     }
 }
