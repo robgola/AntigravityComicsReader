@@ -46,7 +46,7 @@ struct ComicReaderView: View {
     @State private var sliderValue: Double = 0
     
     // Gemini Vision State
-    @State private var visionBalloons: [GeminiService.TranslatedBalloon] = []
+    @State private var visionBalloons: [TranslatedBalloon] = []
     @State private var isGeminiTranslating = false
     
     // Navigation State
@@ -483,6 +483,7 @@ struct ComicReaderView: View {
             filteredRects: index == currentPageIndex ? filteredRects : [],
             bubbleRects: index == currentPageIndex ? bubbleRects : [],
             showDebug: index == currentPageIndex ? showDebug : false,
+            showDebugLog: index == currentPageIndex ? showDebugLog : false,
             visionBalloons: index == currentPageIndex ? visionBalloons : []
         )
     }
@@ -529,89 +530,12 @@ struct ComicReaderView: View {
             return
         }
         
+        // Capture current index to avoid race condition
+        let capturedIndex = currentPageIndex
+        
         do {
-            // 2. Surgical Text Masking (v3.0)
-            // We use Vision to find the EXACT ink of the text, and create a mask to cover ONLY that.
-            
-            // A. Detect Text Lines locally
-            let request = VNRecognizeTextRequest()
-            request.recognitionLevel = .accurate
-            let handler = VNImageRequestHandler(cgImage: image.cgImage!, options: [:])
-            try handler.perform([request])
-            let observations = request.results as? [VNRecognizedTextObservation] ?? []
-            
-            // B. Get Gemini Semantic Balloons
-            var balloons = try await GeminiService.shared.analyzeComicPage(image: image)
-            
-            // C. Map Text to Balloons and Create Masks (v4.0: Hybrid Organic Shapes)
-            // 1. EXTRACT HYBRID ANCHORS (Gemini Center Points)
-            // These are normalized (0-1) in the TranslatedBalloon struct (computed property .center)
-            let hybridSeeds = balloons.map { $0.center }
-            
-            // 2. Detect Bubbles using BubbleDetector (Organic Contours + Hybrid Anchors)
-            let localBubbles = await BubbleDetector.shared.detectBubbles(in: image, observations: observations, extraSeeds: hybridSeeds)
-            
-            for i in 0..<balloons.count {
-                // Gemini Box (Normalized 0..1000) -> Normalized 0..1
-                let gRef = balloons[i].boundingBox
-                let geminiRect = CGRect(
-                    x: CGFloat(gRef.xmin) / 1000.0,
-                    y: CGFloat(gRef.ymin) / 1000.0,
-                    width: CGFloat(gRef.xmax - gRef.xmin) / 1000.0,
-                    height: CGFloat(gRef.ymax - gRef.ymin) / 1000.0
-                )
-                
-                // 2. Find best matching local bubble (IoU)
-                // We want to overlay the translations on the ACTUAL balloon shape.
-                var bestMatchedBubble: DetectedBubble? = nil
-                var maxIoU: CGFloat = 0.0
-                
-                // Convert gemini rect to image coords for IoU check
-                let aiBox = geminiRect.applying(CGAffineTransform(scaleX: image.size.width, y: image.size.height))
-                
-                for bubble in localBubbles {
-                    let bubbleBox = bubble.boundingBox.applying(CGAffineTransform(scaleX: image.size.width, y: image.size.height))
-                    let intersection = aiBox.intersection(bubbleBox)
-                    let union = aiBox.union(bubbleBox)
-                    let iou = (intersection.width * intersection.height) / (union.width * union.height)
-                    
-                    // Threshold: > 10% overlap is usually enough given how different detector boxes can be
-                    if iou > 0.1 && iou > maxIoU {
-                        maxIoU = iou
-                        bestMatchedBubble = bubble
-                    }
-                }
-                
-                // 3. Assign Shape
-                if let match = bestMatchedBubble {
-                    balloons[i].localPath = match.path
-                    
-                    // Sample Background Color from the MATCHED bubble center
-                    let center = match.boundingBox.applying(CGAffineTransform(scaleX: image.size.width, y: image.size.height))
-                     if let cgImage = image.cgImage, let data = cgImage.dataProvider?.data, let ptr = CFDataGetBytePtr(data) {
-                         let bytesPerPixel = 4
-                         let bytesPerRow = cgImage.bytesPerRow
-                         let x = Int(center.midX)
-                         let y = Int(center.midY)
-                         if x >= 0 && x < cgImage.width && y >= 0 && y < cgImage.height {
-                             let off = y * bytesPerRow + x * bytesPerPixel
-                             let r = Double(ptr[off]) / 255.0
-                             let g = Double(ptr[off+1]) / 255.0
-                             let b = Double(ptr[off+2]) / 255.0
-                             let lum = 0.299*r + 0.587*g + 0.114*b
-                             if lum > 0.9 {
-                                 balloons[i].backgroundColor = Color(red: r, green: g, blue: b)
-                             } else {
-                                 balloons[i].backgroundColor = .white
-                             }
-                         }
-                     }
-                } else {
-                     // Fallback: If no local bubble matched, default to white background
-                     // We will likely render a default shape in the overlay view based on this.
-                     balloons[i].backgroundColor = .white
-                }
-            }
+            // v6.0 Pipeline (YOLO + GrabCut + Gemini)
+            let balloons = try await BalloonPipeline.shared.processPage(image: image)
             
             // 5. Save to Cache
             if !balloons.isEmpty {
@@ -619,14 +543,93 @@ struct ComicReaderView: View {
             }
             
             await MainActor.run {
+                // GUARD: Ensure user hasn't moved away
+                guard self.currentPageIndex == capturedIndex else {
+                    print("⚠️ Result discarded: User moved from p\(capturedIndex) to p\(self.currentPageIndex)")
+                    self.isGeminiTranslating = false
+                    return
+                }
+                
                 self.visionBalloons = balloons
                 self.translationMode = .translatedOverlay
                 self.isGeminiTranslating = false
             }
+            
+            // Trigger background prefetch for next pages (if still valid)
+            if currentPageIndex == capturedIndex {
+                prefetchNextPages(count: 2)
+            }
+            
         } catch {
             print("Gemini Translation Error: \(error)")
             await MainActor.run {
                 self.isGeminiTranslating = false
+            }
+        }
+    }
+    
+    // MARK: - Prefetching (v6.2)
+    private func prefetchNextPages(count: Int) {
+        guard !pages.isEmpty else { return }
+        
+        // Start from next page
+        let start = currentPageIndex + 1
+        let end = min(currentPageIndex + count, pages.count - 1)
+        
+        guard start <= end else { return }
+        
+        // Use BookID or Filename
+        let persistenceId = activeBookId ?? activeBookURL.deletingPathExtension().lastPathComponent
+        
+        print("🔮 Prefetching pages \(start) to \(end)...")
+        
+        Task.detached(priority: .background) {
+            for i in start...end {
+                // 1. Check if already translated (Cache)
+                if GeminiService.shared.loadTranslations(forBook: persistenceId, pageIndex: i) != nil {
+                   print("   - Page \(i) already cached. Skipping.")
+                   continue
+                }
+                
+                // 2. Load Image
+                // We need access to `pages` array. Since this is detached, we capture `pages` copy? 
+                // Alternatively, use an Actor or duplicate logic. 
+                // Since `pages` is [URL], it's safe to capture.
+                // NOTE: We cannot access `self.pages` directly in detached task easily without capturing.
+                // Let's rely on standard Task capturing self strongly or just passing data.
+                // To keep it safe and simple, we'll execute the loop logic inside a Task that inherits context or carefully captures.
+            }
+        }
+        
+        // Better approach: Use local Task (inherits actor context) but yield? 
+        // Or just fire and forget on MainActor? `BalloonPipeline` runs on background threads anyway.
+        // Let's use `Task` which inherits MainActor (since we are in View/MainActor) but the pipeline calls are async.
+        
+        Task {
+            for i in start...end {
+                // Check Cache
+                if GeminiService.shared.loadTranslations(forBook: persistenceId, pageIndex: i) != nil {
+                    continue
+                }
+                
+                // Load Image
+                let pageURL = pages[i]
+                guard let image = UIImage(contentsOfFile: pageURL.path) else { continue }
+                
+                print("   - Prefetching Page \(i) (Hybrid v6.1)...")
+                do {
+                    // Call Pipeline (Background)
+                    let balloons = try await BalloonPipeline.shared.processPage(image: image)
+                    if !balloons.isEmpty {
+                        GeminiService.shared.saveTranslations(balloons, forBook: persistenceId, pageIndex: i)
+                        print("   - Page \(i) Prefetch Complete & Saved.")
+                        
+                        // Optional: If we want to aggressively cache images for display, we could do it here,
+                        // but GeminiService only saves JSON. That's fine.
+                    }
+                } catch {
+                    print("   - Page \(i) Prefetch Failed: \(error)")
+                }
             }
         }
     }
@@ -1057,7 +1060,8 @@ struct ReaderPageView: View {
     let bubbleRects: [CGRect]
 
     let showDebug: Bool
-    let visionBalloons: [GeminiService.TranslatedBalloon] // NEW
+    let showDebugLog: Bool // Needed for ReaderOverlayView
+    let visionBalloons: [TranslatedBalloon] // NEW
     
     var body: some View {
         GeometryReader { geometry in
@@ -1177,10 +1181,9 @@ struct ReaderPageView: View {
                         // NEW: Gemini Vision Overlays
                         if !visionBalloons.isEmpty {
                             ReaderOverlayView(
-                                balloons: visionBalloons, 
-                                imageSize: image.size, 
-                                displayedSize: geometry.size, 
-                                showOriginal: (translationMode == .sourceText)
+                                imageSize: image.size,
+                                balloons: visionBalloons,
+                                showDebugShapes: showDebugLog
                             )
                         }
                         

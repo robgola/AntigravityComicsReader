@@ -3,6 +3,11 @@ import Combine
 import SwiftUI
 import UIKit
 
+enum GeminiError: Error {
+    case invalidResponse
+    case uploadFailed
+}
+
 class GeminiService: ObservableObject {
     static let shared = GeminiService()
     
@@ -11,6 +16,58 @@ class GeminiService: ObservableObject {
     @Published var lastRawResponse: String = "" // Debug: Store raw JSON
     @Published var lastMarkedImage: UIImage? = nil // Debug: Store marked image
     
+    // v6.1 Full Page System Prompt
+    private let fullPageSystemPrompt = """
+    You are a professional comic book translator (English to Italian).
+    
+    Task:
+    1. Detect all speech bubbles in the image.
+    2. OCR the original text exactly.
+    3. Translate the text to Italian.
+    4. Provide the bounding box for each bubble [ymin, xmin, ymax, xmax] (0-1000 scale).
+    5. Determine if it's translatable (ignore pure noise/sounds).
+
+    Output JSON Format:
+    {
+      "balloons": [
+        {
+          "original_text": "...",
+          "italian_translation": "...",
+           "box_2d": [ymin, xmin, ymax, xmax],
+           "should_translate": true,
+           "shape": "OVAL"
+        }
+      ]
+    }
+    """
+    
+    // Helper: Resize Image
+    private func resizeImage(_ image: UIImage, targetSize: CGSize = CGSize(width: 1560, height: 1560)) -> Data? {
+        // Resize logic (Aspect Fit)
+        let size = image.size
+        let widthRatio  = targetSize.width  / size.width
+        let heightRatio = targetSize.height / size.height
+        
+        // Determine what scale to use (min scale prevents stretching)
+        let scaleFactor = min(widthRatio, heightRatio)
+        
+        // If already smaller, use original (but compress)
+        let newSize: CGSize
+        if scaleFactor >= 1.0 {
+            newSize = size
+        } else {
+             newSize = CGSize(width: size.width * scaleFactor, height: size.height * scaleFactor)
+        }
+        
+        let renderer = UIGraphicsImageRenderer(size: newSize)
+        let resizedImage = renderer.image { _ in
+            image.draw(in: CGRect(origin: .zero, size: newSize))
+        }
+        
+        // Restore High Quality for Gemini Precision (Text positioning needs details)
+        return resizedImage.jpegData(compressionQuality: 0.85)
+    }
+
     private var apiKey: String {
         return UserDefaults.standard.string(forKey: "geminiApiKey") ?? ""
     }
@@ -286,12 +343,6 @@ class GeminiService: ObservableObject {
     
     // MARK: - Vision OCR (Gemini 1.5/2.5 Flash)
     
-    enum BalloonShape: String, Codable {
-        case oval = "OVAL"
-        case rectangle = "RECTANGLE"
-        case cloud = "CLOUD"
-        case jagged = "JAGGED"
-    }
     
     struct BoundingBox: Codable {
         let ymin: Int
@@ -309,44 +360,6 @@ class GeminiService: ObservableObject {
         }
     }
     
-    struct TranslatedBalloon: Codable, Identifiable {
-        let id: String = UUID().uuidString
-        let originalText: String
-        let translatedText: String
-        let should_translate: Bool // v3.1 Logic
-        let shape: BalloonShape
-        let box2D: [Int] // [ymin, xmin, ymax, xmax]
-        let centerPoint: [Int]? // [y, x] - Optional for backward compatibility
-        
-        var boundingBox: BoundingBox {
-            return BoundingBox(ymin: box2D[0], xmin: box2D[1], ymax: box2D[2], xmax: box2D[3])
-        }
-        
-        var center: CGPoint {
-            if let cp = centerPoint, cp.count == 2 {
-                return CGPoint(x: CGFloat(cp[1]) / 1000.0, y: CGFloat(cp[0]) / 1000.0)
-            }
-            // Fallback
-            let yMid = CGFloat(box2D[0] + box2D[2]) / 2.0 / 1000.0
-            let xMid = CGFloat(box2D[1] + box2D[3]) / 2.0 / 1000.0
-            return CGPoint(x: xMid, y: yMid)
-        }
-        
-        // Internal use (calculated)
-        var localPath: Path? = nil // Legacy/Debug: Full balloon path
-        var textMaskPath: Path? = nil // v3.0: Surgical mask for text only
-        var backgroundColor: Color = .white
-        
-        enum CodingKeys: String, CodingKey {
-            case originalText = "original_text"
-            case translatedText = "italian_translation"
-            case should_translate = "should_translate"
-            case shape
-            case box2D = "box_2d"
-            case centerPoint = "center_point"
-        }
-    }
-    
     struct GeminiVisionResponse: Codable {
         let balloons: [TranslatedBalloon]
     }
@@ -356,7 +369,13 @@ class GeminiService: ObservableObject {
     private func performRequestWithRetry(request: URLRequest, maxRetries: Int = 3) async throws -> Data {
         for attempt in 1...maxRetries {
             do {
-                let (data, response) = try await URLSession.shared.data(for: request)
+                // Extended Configuration for Large Images
+                let config = URLSessionConfiguration.default
+                config.timeoutIntervalForRequest = 120 // 2 minutes
+                config.timeoutIntervalForResource = 300
+                let session = URLSession(configuration: config)
+                
+                let (data, response) = try await session.data(for: request)
                 
                 guard let httpResponse = response as? HTTPURLResponse else {
                     throw NSError(domain: "GeminiService", code: 0, userInfo: [NSLocalizedDescriptionKey: "No Response"])
@@ -364,10 +383,10 @@ class GeminiService: ObservableObject {
                 
                 if httpResponse.statusCode == 200 {
                     return data
-                } else if httpResponse.statusCode == 503 {
+                } else if httpResponse.statusCode == 503 || httpResponse.statusCode == 504 || httpResponse.statusCode == 500 {
                     // Service Unavailable (Overloaded) -> Retry
                     let delay = Double(attempt) * 2.0 // 2s, 4s, 6s...
-                    print("🤖 GEMINI OVERLOAD (503). Retrying in \(delay)s (Attempt \(attempt)/\(maxRetries))")
+                    print("🤖 GEMINI OVERLOAD (\(httpResponse.statusCode)). Retrying in \(delay)s (Attempt \(attempt)/\(maxRetries))")
                     try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
                     continue
                 } else {
@@ -387,6 +406,88 @@ class GeminiService: ObservableObject {
         throw NSError(domain: "GeminiService", code: 503, userInfo: [NSLocalizedDescriptionKey: "Service Unavailable after retries"])
     }
 
+    // MARK: - v6.0 Single Balloon Translation
+    
+    struct TranslateResult: Decodable {
+        let original_text: String
+        let italian_translation: String
+        let should_translate: Bool
+    }
+    
+    /// Analyzes a single cropped balloon image and returns the translation.
+    func translateBalloonCrop(image: UIImage) async throws -> TranslateResult {
+        // Validation (Skip call count for micro-calls? Or aggregate? Let's count them for quota awareness)
+        // await MainActor.run { self.callCount += 1 } 
+        
+        let urlString = "\(baseURL)?key=\(apiKey)"
+        guard let url = URL(string: urlString) else {
+            throw NSError(domain: "GeminiService", code: 400, userInfo: [NSLocalizedDescriptionKey: "Invalid URL"])
+        }
+        
+        // 1. Process Crop (Small image, minimal compression needed)
+        guard let imageData = image.jpegData(compressionQuality: 0.8) else {
+             throw NSError(domain: "GeminiService", code: 400, userInfo: [NSLocalizedDescriptionKey: "Image Processing Failed"])
+        }
+        let base64Image = imageData.base64EncodedString()
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        // 2. Focused Prompt (Context-Free)
+        let systemPrompt = """
+        You are a professional comic book translator.
+        
+        Task:
+        1. Read the text in this image.
+        2. Decide if it requires translation (Rules: NO Sound Effects, NO Proper Names, NO pure noise).
+        3. Translate it to natural Italian.
+        
+        Output JSON:
+        {
+          "original_text": "...",
+          "italian_translation": "...",
+          "should_translate": true/false
+        }
+        """
+        
+        let body: [String: Any] = [
+            "contents": [
+                [
+                    "parts": [
+                        ["text": systemPrompt],
+                        [
+                            "inline_data": [
+                                "mime_type": "image/jpeg",
+                                "data": base64Image
+                            ]
+                        ]
+                    ]
+                ]
+            ],
+            "generationConfig": [
+                "temperature": 0.1, // Slight creativity for translation, but stable format
+                "responseMimeType": "application/json"
+            ]
+        ]
+        
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        // Perform Request
+        let data = try await performRequestWithRetry(request: request)
+        
+        // Decode
+        let completion = try JSONDecoder().decode(GeminiResponse.self, from: data)
+        let jsonString = completion.candidates?.first?.content.parts.first?.text ?? "{}"
+        
+        guard let jsonData = jsonString.data(using: .utf8) else {
+            throw NSError(domain: "GeminiService", code: 500, userInfo: [NSLocalizedDescriptionKey: "Empty JSON"])
+        }
+        
+        return try JSONDecoder().decode(TranslateResult.self, from: jsonData)
+    }
+
+    // Legacy v5.0 method (kept for reference, can be removed later)
     func analyzeComicPage(image: UIImage) async throws -> [TranslatedBalloon] {
         await MainActor.run { self.callCount += 1 }
         
@@ -524,7 +625,9 @@ class GeminiService: ObservableObject {
                 
                 let contourPoints = OpenCVWrapper.refinedBalloonContour(resizedImage, textRect: rect)
                 
-                if let points = contourPoints as? [NSValue], !points.isEmpty {
+                if !contourPoints.isEmpty {
+                    // Implicitly unwrapped or safe because it's non-optional
+                    let points = contourPoints
                     let cgPoints = points.map { $0.cgPointValue }
                     balloon.localPath = Path { p in
                         p.addLines(cgPoints)
@@ -549,6 +652,133 @@ class GeminiService: ObservableObject {
         return []
     }
     
+    // MARK: - Single Crop Translation (v6.0)
+    
+    struct SingleTranslationResult: Codable {
+        let original_text: String
+        let italian_translation: String
+        let should_translate: Bool
+    }
+    
+    func translateBalloonCrop(image: UIImage) async throws -> SingleTranslationResult {
+        // 1. Prepare Image (Max 1024px is plenty for a crop)
+        guard let imageData = resizeImage(image, targetSize: CGSize(width: 1024, height: 1024)) else {
+            throw GeminiError.uploadFailed
+        }
+        let base64Image = imageData.base64EncodedString()
+        
+        let prompt = """
+        You are a generic comic translator.
+        Analyze this image of a single speech bubble.
+        1. OCR the text inside exactly.
+        2. Translate it to Italian.
+        3. Determine if it contains translatable text (ignore sound effects like 'BAM' or 'POW' unless they have meaning, ignore distinct symbols).
+        
+        Return pure JSON:
+        {
+            "original_text": "...",
+            "italian_translation": "...",
+            "should_translate": true
+        }
+        """
+        
+        let requestBody: [String: Any] = [
+            "contents": [
+                [
+                    "parts": [
+                        ["text": prompt],
+                        [
+                            "inline_data": [
+                                "mime_type": "image/jpeg",
+                                "data": base64Image
+                            ]
+                        ]
+                    ]
+                ]
+            ],
+            "generationConfig": [
+                "temperature": 0.0, // Strict formatting
+                "responseMimeType": "application/json"
+            ]
+        ]
+        
+        // Use existing performRequest logic if possible, or replicate
+        guard let url = URL(string: "\(baseURL)?key=\(apiKey)") else { throw GeminiError.invalidResponse }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+        
+        let data = try await performRequestWithRetry(request: request)
+        let completion = try JSONDecoder().decode(GeminiResponse.self, from: data)
+        let jsonString = completion.candidates?.first?.content.parts.first?.text ?? "{}"
+        
+        if let jsonData = jsonString.data(using: .utf8) {
+            return try JSONDecoder().decode(SingleTranslationResult.self, from: jsonData)
+        }
+        
+        throw GeminiError.invalidResponse
+    }
+    
+    // MARK: - Full Page Semantic Analysis (v6.1 Hybrid)
+    
+    /// Fetches raw semantic data (Text + Approx Locations) from Gemini for the full page.
+    /// Does NOT run GrabCut or persistence. Pure API call.
+    func fetchSemanticData(image: UIImage) async throws -> GeminiVisionResponse {
+        // 1. Resize/Compress
+        guard let imageData = resizeImage(image, targetSize: CGSize(width: 1560, height: 1560)) else {
+            throw GeminiError.uploadFailed
+        }
+        
+        let base64Image = imageData.base64EncodedString()
+        
+        // 2. Prepare Request (Reuse V5 Prompt or Optimized one)
+        // We use the existing system prompt which asks for `box_2d` and `original_text`.
+        // The prompt is "hardcoded" inside the logic, let's copy the V5 request construction or factor it out.
+        // For simplicity, I'll replicate the construction here but focused on pure data return.
+        
+        let requestBody: [String: Any] = [
+            "contents": [
+                [
+                    "parts": [
+                        ["text": fullPageSystemPrompt],
+                        [
+                            "inline_data": [
+                                "mime_type": "image/jpeg",
+                                "data": base64Image
+                            ]
+                        ]
+                    ]
+                ]
+            ],
+            "generationConfig": [
+                "temperature": 0.0,
+                "responseMimeType": "application/json"
+            ]
+        ]
+        
+        guard let url = URL(string: "\(baseURL)?key=\(apiKey)") else { throw GeminiError.invalidResponse }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+        
+        print("🤖 GEMINI VISION: Sending Full Page (v6.1 Hybrid Strategy)...")
+        let data = try await performRequestWithRetry(request: request)
+        
+        let completion = try JSONDecoder().decode(GeminiResponse.self, from: data)
+        let jsonString = completion.candidates?.first?.content.parts.first?.text ?? "{}"
+        
+        await MainActor.run {
+            self.lastRawResponse = jsonString
+        }
+        
+        if let jsonData = jsonString.data(using: .utf8) {
+            return try JSONDecoder().decode(GeminiVisionResponse.self, from: jsonData)
+        }
+        
+        throw GeminiError.invalidResponse
+    }
     // MARK: - Persistence
     
     private var translationsDirectory: URL {
